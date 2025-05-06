@@ -15,6 +15,7 @@ import { CheckCircle, XCircle, FileText, HelpCircle, AlertCircle, Lightbulb, Cod
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import { cn } from '@/lib/utils'; // Import cn utility
+import { Badge } from '@/components/ui/badge'; // Import Badge component
 
 // --- Mock Data ---
 // In a real app, this data would come from a database based on `testId`
@@ -140,7 +141,6 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
    // Unwrap params using React.use() - Correct way in newer Next.js versions
    const unwrappedParams = React.use(params);
    const { testId } = unwrappedParams;
-
 
   // In a real app, fetch test data based on testId
   // const [test, setTest] = React.useState<Test | null>(null);
@@ -535,3 +535,5 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
     </div>
   );
 }
+
+    
