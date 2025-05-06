@@ -11,7 +11,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { analyzeProblemSolving, type AnalyzeProblemSolvingOutput } from '@/ai/flows/analyze-problem-solving'; // Import the AI flow
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
+import { Terminal, FileText, BrainCircuit } from 'lucide-react'; // Using BrainCircuit for consistency
+import { Separator } from '@/components/ui/separator';
 
 const analyzeSchema = z.object({
   answer: z.string().min(20, 'Answer must be at least 20 characters long.'),
@@ -51,7 +52,9 @@ export default function AnalyzeProblemSolvingPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-primary">Problem-Solving Analyzer</h1>
+      <h1 className="text-3xl font-bold text-primary flex items-center gap-2">
+         <BrainCircuit className="w-8 h-8" /> Problem-Solving Analyzer
+      </h1>
       <p className="text-muted-foreground">Analyze a candidate's free-form answer using AI to assess their problem-solving approach and efficiency.</p>
 
       <Card>
@@ -140,17 +143,17 @@ export default function AnalyzeProblemSolvingPage() {
           <CardContent className="space-y-4">
             <div>
               <h3 className="font-semibold text-lg mb-1">Problem-Solving Approach:</h3>
-              <p className="text-muted-foreground whitespace-pre-wrap">{analysisResult.problemSolvingApproach}</p>
+              <p className="text-muted-foreground whitespace-pre-wrap bg-background/50 p-3 rounded-md border">{analysisResult.problemSolvingApproach}</p>
             </div>
-             <hr className="my-4 border-border"/>
+             <Separator className="my-4" />
             <div>
               <h3 className="font-semibold text-lg mb-1">Efficiency Assessment:</h3>
-              <p className="text-muted-foreground whitespace-pre-wrap">{analysisResult.efficiencyAssessment}</p>
+              <p className="text-muted-foreground whitespace-pre-wrap bg-background/50 p-3 rounded-md border">{analysisResult.efficiencyAssessment}</p>
             </div>
-             <hr className="my-4 border-border"/>
+             <Separator className="my-4" />
             <div>
               <h3 className="font-semibold text-lg mb-1">Areas for Improvement:</h3>
-              <p className="text-muted-foreground whitespace-pre-wrap">{analysisResult.areasForImprovement}</p>
+              <p className="text-muted-foreground whitespace-pre-wrap bg-background/50 p-3 rounded-md border">{analysisResult.areasForImprovement}</p>
             </div>
           </CardContent>
         </Card>
