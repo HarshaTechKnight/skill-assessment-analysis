@@ -138,7 +138,9 @@ interface Result {
 // Destructure testId directly from params
 export default function TakeTestPage({ params }: { params: { testId: string } }) {
    // Unwrap params using React.use() - Correct way in newer Next.js versions
-   const { testId } = params;
+   const unwrappedParams = React.use(params);
+   const { testId } = unwrappedParams;
+
 
   // In a real app, fetch test data based on testId
   // const [test, setTest] = React.useState<Test | null>(null);
