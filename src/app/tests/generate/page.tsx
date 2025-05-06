@@ -16,53 +16,109 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Cpu, FileText, HelpCircle, Terminal, CheckCircle, XCircle, Sparkles } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast";
+import { Separator } from '@/components/ui/separator'; // Added Separator
 
 // Import functions and *types* only
 import { extractSkillsFromJobDescription, type ExtractSkillsOutput } from '@/ai/flows/extract-skills-from-job-description';
 import { createTestFromSkills, type CreateTestInput, type CreateTestOutput } from '@/ai/flows/create-test-from-skills';
+import { generateJobDescription, type GenerateJobDescriptionInput, type GenerateJobDescriptionOutput } from '@/ai/flows/generate-job-description'; // Added import for description generation
 
 // --- Define Local Zod Schemas for Form Validation ---
-const ExtractSkillsInputFormSchema = z.object({
+const GenerateTestFormSchema = z.object({
+  jobTitle: z.string().min(1, 'Please select a job title.'),
+  seniority: z.enum(['junior', 'mid-level', 'senior', 'lead', 'staff', 'principal']), // Expanded seniority options
   jobDescription: z.string().min(50, { message: 'Job description must be at least 50 characters long.' }),
-});
-
-const CreateTestInputFormSchema = z.object({
-  jobTitle: z.string().min(3, 'Job title is required.'),
-  jobDescription: ExtractSkillsInputFormSchema.shape.jobDescription, // Reuse from extract skills form schema
-  seniority: z.enum(['junior', 'mid-level', 'senior', 'lead']),
   numberOfQuestions: z.number().int().min(3).max(20).default(5),
   assessmentFocus: z.array(z.enum(['technical', 'problem-solving', 'domain-knowledge', 'soft-skills'])).optional(),
 });
 
-// Combine schemas for the multi-step form approach
-const GenerateTestFormSchema = CreateTestInputFormSchema;
-
 type GenerateTestFormValues = z.infer<typeof GenerateTestFormSchema>;
+
+// Predefined job titles for the dropdown
+const commonJobTitles = [
+  "Software Engineer",
+  "Frontend Developer",
+  "Backend Developer",
+  "Full Stack Developer",
+  "Data Scientist",
+  "Data Analyst",
+  "Machine Learning Engineer",
+  "Product Manager",
+  "Project Manager",
+  "UX Designer",
+  "UI Designer",
+  "DevOps Engineer",
+  "Cloud Engineer",
+  "Cybersecurity Analyst",
+  "Business Analyst",
+  "Marketing Manager",
+];
+
 
 export default function GenerateTestPage() {
   const { toast } = useToast();
   const [step, setStep] = React.useState<'input' | 'generating' | 'review'>('input');
   const [extractedSkills, setExtractedSkills] = React.useState<ExtractSkillsOutput | null>(null);
   const [generatedTest, setGeneratedTest] = React.useState<CreateTestOutput | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false); // For test generation
+  const [isGeneratingDesc, setIsGeneratingDesc] = React.useState(false); // For description generation
+  const [error, setError] = React.useState<string | null>(null); // For test generation
+  const [generateDescError, setGenerateDescError] = React.useState<string | null>(null); // For description generation
   const [formData, setFormData] = React.useState<GenerateTestFormValues | null>(null); // Store form data
 
   const form = useForm<GenerateTestFormValues>({
-    resolver: zodResolver(GenerateTestFormSchema), // Use local schema
+    resolver: zodResolver(GenerateTestFormSchema),
     defaultValues: {
       jobTitle: '',
-      jobDescription: '',
       seniority: 'mid-level',
+      jobDescription: '',
       numberOfQuestions: 5,
       assessmentFocus: [],
     },
   });
 
+  // Function to handle AI generation of job description
+  const handleGenerateDescription = async () => {
+    const jobTitle = form.getValues('jobTitle');
+    const seniority = form.getValues('seniority');
+
+    if (!jobTitle) {
+      setGenerateDescError("Please select a job title to generate a description.");
+      toast({
+        title: "Job Title Missing",
+        description: "Select a job title before generating.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingDesc(true);
+    setGenerateDescError(null);
+    setError(null); // Clear test gen error
+    // Keep previous results? setExtractedSkills(null); setGeneratedTest(null);
+
+    try {
+      toast({ title: "Generating Job Description...", description: "AI is crafting the description." });
+      const input: GenerateJobDescriptionInput = { jobTitle, seniority };
+      const result = await generateJobDescription(input);
+      form.setValue('jobDescription', result.jobDescription, { shouldValidate: true });
+      toast({ title: "Description Generated!", description: "Review and edit the description below.", variant: "default" });
+    } catch (err: any) {
+      console.error("Error generating job description:", err);
+      setGenerateDescError(err.message || "Failed to generate job description.");
+      toast({ title: "Generation Failed", description: err.message || "Could not generate description.", variant: "destructive" });
+    } finally {
+      setIsGeneratingDesc(false);
+    }
+  };
+
+
+  // --- Main submission for Test Generation ---
   const onSubmit = async (data: GenerateTestFormValues) => {
-    setIsLoading(true);
+    setIsLoading(true); // Use main loading state
     setError(null);
+    setGenerateDescError(null); // Clear description error
     setExtractedSkills(null);
     setGeneratedTest(null);
     setStep('generating');
@@ -71,7 +127,6 @@ export default function GenerateTestPage() {
     try {
       // Step 1: Extract Skills
       toast({ title: "Step 1: Extracting Skills...", description: "Analyzing job description." });
-      // Pass data matching ExtractSkillsInput type
       const skillsResult = await extractSkillsFromJobDescription({ jobDescription: data.jobDescription });
       setExtractedSkills(skillsResult);
 
@@ -81,12 +136,11 @@ export default function GenerateTestPage() {
 
       // Step 2: Generate Test
       toast({ title: "Step 2: Generating Test...", description: "Creating questions based on skills." });
-      // Construct the input for createTestFromSkills using the server action's expected type
       const testInput: CreateTestInput = {
         jobTitle: data.jobTitle,
         jobDescription: data.jobDescription,
-        extractedSkills: skillsResult.extractedSkills, // Use the result from step 1
-        seniority: data.seniority,
+        extractedSkills: skillsResult.extractedSkills,
+        seniority: data.seniority as 'junior' | 'mid-level' | 'senior' | 'lead', // Cast based on form schema
         numberOfQuestions: data.numberOfQuestions,
         assessmentFocus: data.assessmentFocus,
       };
@@ -99,7 +153,7 @@ export default function GenerateTestPage() {
     } catch (err: any) {
       console.error("Error generating test:", err);
       setError(err.message || "An unexpected error occurred during test generation.");
-      setStep('input'); // Go back to input form on error
+      setStep('input');
       toast({ title: "Error Generating Test", description: err.message || "Please check inputs and try again.", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -126,23 +180,21 @@ export default function GenerateTestPage() {
 
   const handleEdit = () => {
     setStep('input');
-    // Optionally clear results or keep them for context
-    // setGeneratedTest(null);
-    // setExtractedSkills(null);
   }
 
   const handleAccept = () => {
-     // In a real app, save the generatedTest data
+    // In a real app, save the generatedTest to a database
     console.log("Test Accepted:", generatedTest);
     toast({
       title: "Test Saved!",
       description: `The test "${generatedTest?.testTitle}" has been saved.`,
     });
-    // Optionally redirect or clear form
-    // form.reset();
-    // setStep('input');
-    // setGeneratedTest(null);
-    // setExtractedSkills(null);
+    // Optionally reset or navigate away
+    setStep('input'); // Go back to input for potentially generating another test
+    form.reset();
+    setExtractedSkills(null);
+    setGeneratedTest(null);
+    setFormData(null);
   }
 
 
@@ -153,162 +205,210 @@ export default function GenerateTestPage() {
       </h1>
        <p className="text-muted-foreground">Generate tailored skill assessments automatically based on job requirements and desired focus areas.</p>
 
-      {error && step === 'input' && (
+      {/* Display combined errors at the top if they exist */}
+      {(error || generateDescError) && step === 'input' && (
          <Alert variant="destructive">
           <Terminal className="h-4 w-4" />
           <AlertTitle>Error Occurred</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error || generateDescError}</AlertDescription>
         </Alert>
       )}
 
-      {/* --- Input Form --- */}
+      {/* --- Input Form Area --- */}
       {step === 'input' && (
-        <Card>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <CardHeader>
-                <CardTitle>Define Assessment Parameters</CardTitle>
-                <CardDescription>Provide details about the role and the desired test structure.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                    control={form.control}
-                    name="jobTitle"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Job Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., Senior Software Engineer" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="seniority"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Seniority Level</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select seniority level" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="junior">Junior</SelectItem>
-                            <SelectItem value="mid-level">Mid-Level</SelectItem>
-                            <SelectItem value="senior">Senior</SelectItem>
-                            <SelectItem value="lead">Lead</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
 
-                 <FormField
-                    control={form.control}
-                    name="jobDescription"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Job Description</FormLabel>
-                        <FormControl>
-                        <Textarea
-                            placeholder="Paste the full job description here. This is crucial for identifying relevant skills."
-                            className="min-h-[150px]"
-                            {...field}
-                        />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                />
-
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <FormField
-                    control={form.control}
-                    name="numberOfQuestions"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Number of Questions</FormLabel>
-                         <FormControl>
-                            <Input
-                                type="number"
-                                min="3"
-                                max="20"
-                                {...field}
-                                onChange={event => field.onChange(+event.target.value)} // Ensure value is number
-                             />
-                        </FormControl>
-                        <FormDescription>Between 3 and 20 questions.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                   <FormField
-                      control={form.control}
-                      name="assessmentFocus"
-                      render={() => (
-                        <FormItem>
-                          <div className="mb-4">
-                            <FormLabel className="text-base">Assessment Focus (Optional)</FormLabel>
-                            <FormDescription>
-                              Guide the AI to prioritize certain types of questions.
-                            </FormDescription>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                             {(['technical', 'problem-solving', 'domain-knowledge', 'soft-skills'] as const).map((item) => (
-                               <FormField
-                                  key={item}
-                                  control={form.control}
-                                  name="assessmentFocus"
-                                  render={({ field }) => {
-                                  return (
-                                    <FormItem
-                                      key={item}
-                                      className="flex flex-row items-start space-x-3 space-y-0"
-                                    >
-                                      <FormControl>
-                                        <Checkbox
-                                          checked={field.value?.includes(item)}
-                                          onCheckedChange={(checked) => {
-                                            return checked
-                                              ? field.onChange([...(field.value ?? []), item])
-                                              : field.onChange(
-                                                  (field.value ?? []).filter(
-                                                    (value) => value !== item
-                                                  )
-                                                )
-                                          }}
-                                        />
-                                      </FormControl>
-                                      <FormLabel className="font-normal capitalize">
-                                        {item.replace('-', ' ')}
-                                      </FormLabel>
-                                    </FormItem>
-                                  )
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
+              {/* Card 1: Job Title, Seniority, and AI Description Generation */}
+              <Card>
+                 <CardHeader>
+                    <CardTitle>Step 1: Define Role & Description</CardTitle>
+                    <CardDescription>Select the job title and seniority. Optionally, generate a job description using AI.</CardDescription>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <FormField
+                        control={form.control}
+                        name="jobTitle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Job Title *</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a job title" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {commonJobTitles.map((title) => (
+                                  <SelectItem key={title} value={title}>{title}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="seniority"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Seniority Level *</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select seniority level" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="junior">Junior</SelectItem>
+                                <SelectItem value="mid-level">Mid-Level</SelectItem>
+                                <SelectItem value="senior">Senior</SelectItem>
+                                <SelectItem value="lead">Lead</SelectItem>
+                                <SelectItem value="staff">Staff</SelectItem>
+                                <SelectItem value="principal">Principal</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                 </CardContent>
+                 <CardFooter className="flex justify-between items-center">
+                     <Button type="button" variant="secondary" onClick={handleGenerateDescription} disabled={isGeneratingDesc || isLoading}>
+                       {isGeneratingDesc ? (
+                        <>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                          Generating...
+                        </>
+                       ) : (
+                        <>
+                           <Sparkles className="mr-2 h-4 w-4" /> Generate Description with AI
+                         </>
                       )}
+                     </Button>
+                     {generateDescError && (
+                        <p className="text-sm text-destructive">{generateDescError}</p>
+                     )}
+                 </CardFooter>
+              </Card>
+
+              {/* Separator */}
+               <div className="flex items-center my-4">
+                 <Separator className="flex-1" />
+                 <span className="mx-4 text-sm text-muted-foreground">THEN</span>
+                 <Separator className="flex-1" />
+               </div>
+
+
+               {/* Card 2: Job Description, Test Params, and Final Submission */}
+               <Card>
+                  <CardHeader>
+                    <CardTitle>Step 2: Configure Assessment</CardTitle>
+                    <CardDescription>Paste or edit the job description, then set the test parameters.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                     <FormField
+                        control={form.control}
+                        name="jobDescription"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Job Description *</FormLabel>
+                            <FormControl>
+                            <Textarea
+                                placeholder="Paste the full job description here, or edit the AI-generated one. This is crucial for identifying relevant skills."
+                                className="min-h-[150px]"
+                                {...field}
+                            />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                     />
-                 </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={isLoading} className="w-full md:w-auto">
-                   <Sparkles className="mr-2 h-4 w-4" /> Generate Test with AI
-                </Button>
-              </CardFooter>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <FormField
+                        control={form.control}
+                        name="numberOfQuestions"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Number of Questions</FormLabel>
+                             <FormControl>
+                                <Input
+                                    type="number"
+                                    min="3"
+                                    max="20"
+                                    {...field}
+                                    onChange={event => field.onChange(+event.target.value)}
+                                 />
+                            </FormControl>
+                            <FormDescription>Between 3 and 20.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                       <FormField
+                          control={form.control}
+                          name="assessmentFocus"
+                          render={() => (
+                            <FormItem>
+                              <div className="mb-4">
+                                <FormLabel className="text-base">Assessment Focus (Optional)</FormLabel>
+                                <FormDescription>
+                                  Guide AI on question types.
+                                </FormDescription>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                 {(['technical', 'problem-solving', 'domain-knowledge', 'soft-skills'] as const).map((item) => (
+                                   <FormField
+                                      key={item}
+                                      control={form.control}
+                                      name="assessmentFocus"
+                                      render={({ field }) => {
+                                      return (
+                                        <FormItem
+                                          key={item}
+                                          className="flex flex-row items-start space-x-3 space-y-0"
+                                        >
+                                          <FormControl>
+                                            <Checkbox
+                                              checked={field.value?.includes(item)}
+                                              onCheckedChange={(checked) => {
+                                                return checked
+                                                  ? field.onChange([...(field.value ?? []), item])
+                                                  : field.onChange(
+                                                      (field.value ?? []).filter(
+                                                        (value) => value !== item
+                                                      )
+                                                    )
+                                              }}
+                                            />
+                                          </FormControl>
+                                          <FormLabel className="font-normal capitalize">
+                                            {item.replace('-', ' ')}
+                                          </FormLabel>
+                                        </FormItem>
+                                      )
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                     </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button type="submit" disabled={isLoading || isGeneratingDesc} className="w-full md:w-auto">
+                       {isLoading ? 'Generating Test...' : 'Generate Test'}
+                    </Button>
+                  </CardFooter>
+               </Card>
             </form>
           </Form>
-        </Card>
       )}
 
       {/* --- Loading / Generating State --- */}
