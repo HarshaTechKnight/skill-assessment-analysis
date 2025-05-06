@@ -26,3 +26,10 @@ This platform leverages the power of AI to assist in various aspects of career d
 ## Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues to discuss potential improvements or new features.
+
+## Screenshots:
+
+You can see a screenshot of the platform here:
+
+
+![ScreenShot](https://github.com/user-attachments/assets/7ecd6bec-d5c6-4ba4-8c26-814d2b0475fe)
