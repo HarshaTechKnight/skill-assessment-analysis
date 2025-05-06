@@ -18,12 +18,12 @@ const SkillSchema = z.object({
   context: z.string().optional().describe('Brief context or example from the job description related to the skill.'),
 });
 
-export const ExtractSkillsInputSchema = z.object({
+const ExtractSkillsInputSchema = z.object({
   jobDescription: z.string().min(50).describe('The full text of the job description.'),
 });
 export type ExtractSkillsInput = z.infer<typeof ExtractSkillsInputSchema>;
 
-export const ExtractSkillsOutputSchema = z.object({
+const ExtractSkillsOutputSchema = z.object({
   extractedSkills: z.array(SkillSchema).describe('A list of skills extracted from the job description, categorized and rated by importance.'),
 });
 export type ExtractSkillsOutput = z.infer<typeof ExtractSkillsOutputSchema>;

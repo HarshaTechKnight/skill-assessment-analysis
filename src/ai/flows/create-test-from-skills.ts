@@ -10,7 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { ExtractSkillsOutputSchema } from './extract-skills-from-job-description'; // Import skill schema
+// Import the *type* only, not the schema object itself
+import type { ExtractSkillsOutput } from './extract-skills-from-job-description';
 
 // Define question structures consistent with the existing test format
 const QuestionOptionSchema = z.object({
@@ -43,17 +44,28 @@ const QuestionSchema = z.object({
 }, { message: "Multiple choice questions must have exactly one correct option." });
 
 
-export const CreateTestInputSchema = z.object({
+// Internal schema definition
+const ExtractSkillsOutputSkillsSchema = z.object({
+    extractedSkills: z.array(z.object({
+        name: z.string(),
+        category: z.enum(['technical', 'soft', 'domain-specific', 'tooling', 'other']),
+        importance: z.enum(['critical', 'important', 'nice-to-have']),
+        context: z.string().optional(),
+    })).describe('The list of skills extracted from the job description.'),
+});
+
+
+const CreateTestInputSchema = z.object({
   jobTitle: z.string().describe('The title of the job role.'),
   jobDescription: z.string().describe('The full job description text.'),
-  extractedSkills: ExtractSkillsOutputSchema.shape.extractedSkills.describe('The list of skills extracted from the job description.'),
+  extractedSkills: ExtractSkillsOutputSkillsSchema.shape.extractedSkills, // Use the internal schema shape
   seniority: z.enum(['junior', 'mid-level', 'senior', 'lead']).describe('The seniority level of the role.'),
   numberOfQuestions: z.number().int().min(3).max(20).default(5).describe('The desired number of questions in the test.'),
   assessmentFocus: z.array(z.enum(['technical', 'problem-solving', 'domain-knowledge', 'soft-skills'])).optional().describe('Optional focus areas for the assessment.'),
 });
 export type CreateTestInput = z.infer<typeof CreateTestInputSchema>;
 
-export const CreateTestOutputSchema = z.object({
+const CreateTestOutputSchema = z.object({
   testTitle: z.string().describe('A suitable title for the generated test.'),
   questions: z.array(QuestionSchema).describe('The list of generated assessment questions.'),
 });

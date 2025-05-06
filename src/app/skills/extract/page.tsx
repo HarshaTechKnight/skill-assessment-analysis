@@ -12,9 +12,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ClipboardList, Terminal } from 'lucide-react';
-import { extractSkillsFromJobDescription, ExtractSkillsInputSchema, type ExtractSkillsOutput, ExtractSkillsInput } from '@/ai/flows/extract-skills-from-job-description';
+import * as z from 'zod';
+// Import the function and *types* only
+import { extractSkillsFromJobDescription, type ExtractSkillsOutput, type ExtractSkillsInput } from '@/ai/flows/extract-skills-from-job-description';
 
-type ExtractSkillsFormValues = ExtractSkillsInput;
+// Define the Zod schema locally for form validation
+const ExtractSkillsFormSchema = z.object({
+  jobDescription: z.string().min(50, { message: 'Job description must be at least 50 characters long.' }),
+});
+
+type ExtractSkillsFormValues = z.infer<typeof ExtractSkillsFormSchema>; // Use local schema for form values
 
 export default function ExtractSkillsPage() {
   const [extractedSkills, setExtractedSkills] = React.useState<ExtractSkillsOutput | null>(null);
@@ -22,18 +29,21 @@ export default function ExtractSkillsPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   const form = useForm<ExtractSkillsFormValues>({
-    resolver: zodResolver(ExtractSkillsInputSchema),
+    resolver: zodResolver(ExtractSkillsFormSchema), // Use local schema for resolver
     defaultValues: {
       jobDescription: '',
     },
   });
 
+  // The onSubmit function now accepts the local form values type
+  // but passes the data conforming to the ExtractSkillsInput type to the server action
   const onSubmit = async (data: ExtractSkillsFormValues) => {
     setIsLoading(true);
     setError(null);
     setExtractedSkills(null);
 
     try {
+      // Pass the validated data (which matches the ExtractSkillsInput structure)
       const result = await extractSkillsFromJobDescription(data);
       setExtractedSkills(result);
     } catch (err: any) {

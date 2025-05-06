@@ -11,7 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const AnalyzeCodeQualityInputSchema = z.object({
+const AnalyzeCodeQualityInputSchema = z.object({
   codeSnippet: z.string().min(20).describe('The code submitted by the candidate.'),
   language: z.string().describe('The programming language of the snippet (e.g., javascript, python, java).'),
   jobRequirements: z.string().optional().describe('Relevant job requirements or coding standards for context.'),
@@ -19,7 +19,7 @@ export const AnalyzeCodeQualityInputSchema = z.object({
 });
 export type AnalyzeCodeQualityInput = z.infer<typeof AnalyzeCodeQualityInputSchema>;
 
-export const AnalyzeCodeQualityOutputSchema = z.object({
+const AnalyzeCodeQualityOutputSchema = z.object({
   functionalityAssessment: z.string().describe('Assessment of whether the code likely solves the intended problem (based on description, if provided). Does it appear functionally correct?'),
   readabilityScore: z.number().min(0).max(10).describe('Score from 0-10 for code readability and clarity.'),
   maintainabilityScore: z.number().min(0).max(10).describe('Score from 0-10 for code maintainability.'),
@@ -91,4 +91,3 @@ const analyzeCodeQualityFlow = ai.defineFlow(
     return output!;
   }
 );
-

@@ -18,18 +18,25 @@ import { Badge } from '@/components/ui/badge';
 import { Cpu, FileText, HelpCircle, Terminal, CheckCircle, XCircle, Sparkles } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast"
 
-import { extractSkillsFromJobDescription, ExtractSkillsInputSchema, ExtractSkillsOutputSchema, type ExtractSkillsOutput } from '@/ai/flows/extract-skills-from-job-description';
-import { createTestFromSkills, CreateTestInputSchema, type CreateTestOutput } from '@/ai/flows/create-test-from-skills';
+// Import functions and *types* only
+import { extractSkillsFromJobDescription, type ExtractSkillsOutput } from '@/ai/flows/extract-skills-from-job-description';
+import { createTestFromSkills, type CreateTestInput, type CreateTestOutput } from '@/ai/flows/create-test-from-skills';
 
+// --- Define Local Zod Schemas for Form Validation ---
+const ExtractSkillsInputFormSchema = z.object({
+  jobDescription: z.string().min(50, { message: 'Job description must be at least 50 characters long.' }),
+});
+
+const CreateTestInputFormSchema = z.object({
+  jobTitle: z.string().min(3, 'Job title is required.'),
+  jobDescription: ExtractSkillsInputFormSchema.shape.jobDescription, // Reuse from extract skills form schema
+  seniority: z.enum(['junior', 'mid-level', 'senior', 'lead']),
+  numberOfQuestions: z.number().int().min(3).max(20).default(5),
+  assessmentFocus: z.array(z.enum(['technical', 'problem-solving', 'domain-knowledge', 'soft-skills'])).optional(),
+});
 
 // Combine schemas for the multi-step form approach
-const GenerateTestFormSchema = z.object({
-  jobTitle: z.string().min(3, 'Job title is required.'),
-  jobDescription: ExtractSkillsInputSchema.shape.jobDescription, // Reuse from extract skills
-  seniority: CreateTestInputSchema.shape.seniority,
-  numberOfQuestions: CreateTestInputSchema.shape.numberOfQuestions,
-  assessmentFocus: CreateTestInputSchema.shape.assessmentFocus.optional(),
-});
+const GenerateTestFormSchema = CreateTestInputFormSchema;
 
 type GenerateTestFormValues = z.infer<typeof GenerateTestFormSchema>;
 
@@ -43,7 +50,7 @@ export default function GenerateTestPage() {
   const [formData, setFormData] = React.useState<GenerateTestFormValues | null>(null); // Store form data
 
   const form = useForm<GenerateTestFormValues>({
-    resolver: zodResolver(GenerateTestFormSchema),
+    resolver: zodResolver(GenerateTestFormSchema), // Use local schema
     defaultValues: {
       jobTitle: '',
       jobDescription: '',
@@ -64,6 +71,7 @@ export default function GenerateTestPage() {
     try {
       // Step 1: Extract Skills
       toast({ title: "Step 1: Extracting Skills...", description: "Analyzing job description." });
+      // Pass data matching ExtractSkillsInput type
       const skillsResult = await extractSkillsFromJobDescription({ jobDescription: data.jobDescription });
       setExtractedSkills(skillsResult);
 
@@ -73,10 +81,11 @@ export default function GenerateTestPage() {
 
       // Step 2: Generate Test
       toast({ title: "Step 2: Generating Test...", description: "Creating questions based on skills." });
-      const testInput: z.infer<typeof CreateTestInputSchema> = {
+      // Construct the input for createTestFromSkills using the server action's expected type
+      const testInput: CreateTestInput = {
         jobTitle: data.jobTitle,
         jobDescription: data.jobDescription,
-        extractedSkills: skillsResult.extractedSkills,
+        extractedSkills: skillsResult.extractedSkills, // Use the result from step 1
         seniority: data.seniority,
         numberOfQuestions: data.numberOfQuestions,
         assessmentFocus: data.assessmentFocus,
@@ -426,4 +435,3 @@ export default function GenerateTestPage() {
     </div>
   );
 }
-

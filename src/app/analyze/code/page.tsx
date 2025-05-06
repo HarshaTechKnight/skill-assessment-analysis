@@ -14,10 +14,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Code, Terminal, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
-import { analyzeCodeQuality, AnalyzeCodeQualityInputSchema, type AnalyzeCodeQualityOutput } from '@/ai/flows/analyze-code-quality';
+// Import the function and *types* only
+import { analyzeCodeQuality, type AnalyzeCodeQualityInput, type AnalyzeCodeQualityOutput } from '@/ai/flows/analyze-code-quality';
 import { Separator } from '@/components/ui/separator';
 
-type AnalyzeCodeFormValues = z.infer<typeof AnalyzeCodeQualityInputSchema>;
+// Define the Zod schema locally for form validation
+const AnalyzeCodeFormSchema = z.object({
+  codeSnippet: z.string().min(20, { message: "Code snippet must be at least 20 characters."}),
+  language: z.string().min(1, { message: "Programming language must be specified." }),
+  jobRequirements: z.string().optional(),
+  problemDescription: z.string().optional(),
+});
+
+// Use the local schema for form values type
+type AnalyzeCodeFormValues = z.infer<typeof AnalyzeCodeFormSchema>;
 
 export default function AnalyzeCodeQualityPage() {
   const [analysisResult, setAnalysisResult] = React.useState<AnalyzeCodeQualityOutput | null>(null);
@@ -25,7 +35,7 @@ export default function AnalyzeCodeQualityPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   const form = useForm<AnalyzeCodeFormValues>({
-    resolver: zodResolver(AnalyzeCodeQualityInputSchema),
+    resolver: zodResolver(AnalyzeCodeFormSchema), // Use local schema
     defaultValues: {
       codeSnippet: '',
       language: 'javascript', // Default language
@@ -34,12 +44,15 @@ export default function AnalyzeCodeQualityPage() {
     },
   });
 
+  // The onSubmit function now accepts the local form values type
+  // but passes the data conforming to the AnalyzeCodeQualityInput type to the server action
   const onSubmit = async (data: AnalyzeCodeFormValues) => {
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
 
     try {
+      // Pass the validated data (which matches the AnalyzeCodeQualityInput structure)
       const result = await analyzeCodeQuality(data);
       setAnalysisResult(result);
     } catch (err: any) {

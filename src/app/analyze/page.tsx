@@ -9,16 +9,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
-import { analyzeProblemSolving, type AnalyzeProblemSolvingOutput } from '@/ai/flows/analyze-problem-solving'; // Import the AI flow
+// Import the function and *type* only
+import { analyzeProblemSolving, type AnalyzeProblemSolvingOutput, type AnalyzeProblemSolvingInput } from '@/ai/flows/analyze-problem-solving';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, FileText, BrainCircuit } from 'lucide-react'; // Using BrainCircuit for consistency
 import { Separator } from '@/components/ui/separator';
 
+// Define the Zod schema locally for form validation
 const analyzeSchema = z.object({
   answer: z.string().min(20, 'Answer must be at least 20 characters long.'),
   jobRequirements: z.string().min(10, 'Job requirements must be detailed.'),
 });
 
+// Use the local schema for form values type
 type AnalyzeFormValues = z.infer<typeof analyzeSchema>;
 
 export default function AnalyzeProblemSolvingPage() {
@@ -27,19 +30,22 @@ export default function AnalyzeProblemSolvingPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   const form = useForm<AnalyzeFormValues>({
-    resolver: zodResolver(analyzeSchema),
+    resolver: zodResolver(analyzeSchema), // Use local schema for resolver
     defaultValues: {
       answer: '',
       jobRequirements: '',
     },
   });
 
+  // The onSubmit function now accepts the local form values type
+  // but passes the data conforming to the AnalyzeProblemSolvingInput type to the server action
   const onSubmit = async (data: AnalyzeFormValues) => {
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
 
     try {
+      // Pass the validated data (which matches the AnalyzeProblemSolvingInput structure)
       const result = await analyzeProblemSolving(data);
       setAnalysisResult(result);
     } catch (err) {
