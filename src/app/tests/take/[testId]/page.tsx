@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 
 // --- Mock Data ---
-// In a real app, this data would come from a database based on `params.testId`
+// In a real app, this data would come from a database based on `testId`
 interface QuestionOption {
   id: string;
   text: string;
@@ -107,22 +107,31 @@ interface Result {
   }[];
 }
 
-export default function TakeTestPage({ params }: { params: { testId: string } }) {
-  // In a real app, fetch test data based on params.testId
+// Destructure testId directly from params
+export default function TakeTestPage({ params: { testId } }: { params: { testId: string } }) {
+  // In a real app, fetch test data based on testId
   // const [test, setTest] = React.useState<Test | null>(null);
-  // React.useEffect(() => { fetch(`/api/tests/${params.testId}`).then(res => res.json()).then(data => setTest(data))}, [params.testId]);
+  // React.useEffect(() => { fetch(`/api/tests/${testId}`).then(res => res.json()).then(data => setTest(data))}, [testId]);
   // For now, we use the sample test:
-  const test = params.testId === 'sample' ? sampleTest : null; // Basic routing for sample
+  const test = testId === 'sample' ? sampleTest : null; // Basic routing for sample
 
   const [result, setResult] = React.useState<Result | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
 
+  // testSchema depends on the test data, memoize based on the specific testId
   const testSchema = React.useMemo(() => test ? generateSchema(test) : z.object({}), [test]);
 
   const form = useForm<TestFormValues>({
     resolver: zodResolver(testSchema),
     defaultValues: {}, // Default values will be empty initially
   });
+
+  // Reset form when testId changes (though unlikely in this setup without full routing)
+  React.useEffect(() => {
+    form.reset();
+    setResult(null);
+  }, [testId, form]);
+
 
   const onSubmit = (data: TestFormValues) => {
     if (!test) return;
@@ -163,10 +172,10 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
   if (!test) {
     // In a real app, show a loading state or proper error
     return (
-        <div className="flex flex-col items-center justify-center h-full space-y-4">
+        <div className="flex flex-col items-center justify-center h-full space-y-4 mt-10">
             <AlertCircle className="w-16 h-16 text-destructive" />
              <h1 className="text-2xl font-semibold">Test Not Found</h1>
-             <p className="text-muted-foreground">The requested test could not be found.</p>
+             <p className="text-muted-foreground">The requested test ('{testId}') could not be found.</p>
              <Link href="/" passHref>
                  <Button variant="outline">Go Back Home</Button>
              </Link>
@@ -327,3 +336,4 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
   );
 }
 
+    
