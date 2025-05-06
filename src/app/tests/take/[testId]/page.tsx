@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, XCircle, FileText, HelpCircle, AlertCircle, Lightbulb } from 'lucide-react'; // Added Lightbulb
+import { CheckCircle, XCircle, FileText, HelpCircle, AlertCircle, Lightbulb, Code } from 'lucide-react'; // Added Code icon
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import { cn } from '@/lib/utils'; // Import cn utility
@@ -26,11 +26,13 @@ interface QuestionOption {
 
 interface Question {
   id: string;
-  type: 'multiple-choice' | 'free-form';
+  type: 'multiple-choice' | 'free-form' | 'coding-challenge'; // Added 'coding-challenge'
   text: string;
   options?: QuestionOption[];
-  // Add a field for the ideal answer/explanation for free-form, though AI analysis is better
-  explanation?: string;
+  explanation?: string; // For MCQs and free-form ideal answers
+  language?: string; // For coding challenges
+  starterCode?: string; // For coding challenges
+  solution?: string; // Example solution for coding challenges
 }
 
 interface Test {
@@ -39,10 +41,10 @@ interface Test {
   questions: Question[];
 }
 
-// Expanded Sample Test Data with Explanations
+// Expanded Sample Test Data with Explanations and Coding Challenge
 const sampleTest: Test = {
   id: 'sample',
-  title: 'Sample Web Development Basics Test',
+  title: 'Sample Web Development & Coding Test',
   questions: [
     {
       id: 'q1',
@@ -75,15 +77,25 @@ const sampleTest: Test = {
     },
      {
       id: 'q4',
-      type: 'multiple-choice',
-      text: 'What is the purpose of a `<div>` tag in HTML?',
-      options: [
-        { id: 'q4o1', text: 'To define a hyperlink' },
-        { id: 'q4o2', text: 'To create a division or a section', isCorrect: true },
-        { id: 'q4o3', text: 'To display an image' },
-        { id: 'q4o4', text: 'To format text as bold' },
-      ],
-      explanation: 'The `<div>` tag is a generic container element used to group other HTML elements together and apply styles (via CSS) or manipulate them (via JavaScript). It represents a division or section within the document.'
+      type: 'coding-challenge', // New question type
+      text: 'Write a JavaScript function `sumArray(arr)` that takes an array of numbers and returns their sum. Handle potential non-numeric elements by ignoring them.',
+      language: 'javascript',
+      starterCode: `function sumArray(arr) {
+  // Your code here
+
+}`,
+      solution: `function sumArray(arr) {
+  let sum = 0;
+  if (!Array.isArray(arr)) {
+    return 0; // Or throw an error, depending on requirements
+  }
+  for (const item of arr) {
+    if (typeof item === 'number' && !isNaN(item)) {
+      sum += item;
+    }
+  }
+  return sum;
+}`
     },
   ],
 };
@@ -98,6 +110,9 @@ const generateSchema = (test: Test) => {
       schemaObject[q.id] = z.string().min(1, { message: 'Please select an option.' });
     } else if (q.type === 'free-form') {
       schemaObject[q.id] = z.string().min(10, { message: 'Answer must be at least 10 characters.' });
+    } else if (q.type === 'coding-challenge') {
+      // Basic validation for coding challenges - ensure something is entered
+      schemaObject[q.id] = z.string().min(1, { message: 'Please enter your code.' });
     }
   });
   return z.object(schemaObject);
@@ -107,16 +122,17 @@ type TestFormValues = z.infer<ReturnType<typeof generateSchema>>;
 
 interface ResultDetail {
     questionId: string;
-    isCorrect?: boolean; // Undefined for free-form
+    isCorrect?: boolean; // Undefined for free-form and coding
     selectedOptionId?: string;
     correctOptionId?: string;
-    userAnswer?: string; // Store user's free-form answer
+    userAnswer?: string; // Store user's free-form or code answer
     feedbackMessage?: string; // Simple static feedback
 }
 interface Result {
   score: number;
   totalMultipleChoice: number;
   details: ResultDetail[];
+  hasCodingOrFreeForm: boolean; // Flag if further review needed
 }
 
 // Destructure testId directly from params
@@ -138,14 +154,34 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
 
   const form = useForm<TestFormValues>({
     resolver: zodResolver(testSchema),
-    defaultValues: {}, // Default values will be empty initially
+    defaultValues: test ? test.questions.reduce((acc, q) => {
+        if (q.type === 'coding-challenge' && q.starterCode) {
+          acc[q.id] = q.starterCode;
+        } else {
+          acc[q.id] = '';
+        }
+        return acc;
+      }, {} as TestFormValues) : {}, // Set starter code as default
   });
 
-  // Reset form when testId changes
+
+  // Reset form when testId changes or test data loads
   React.useEffect(() => {
-    form.reset();
+     if (test) {
+        const defaultVals = test.questions.reduce((acc, q) => {
+            if (q.type === 'coding-challenge' && q.starterCode) {
+                acc[q.id] = q.starterCode;
+            } else {
+                acc[q.id] = '';
+            }
+            return acc;
+        }, {} as TestFormValues);
+         form.reset(defaultVals);
+     } else {
+         form.reset({});
+     }
     setResult(null);
-  }, [testId, form]);
+  }, [testId, test, form]);
 
 
   const onSubmit = (data: TestFormValues) => {
@@ -156,6 +192,7 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
     setTimeout(() => {
       let score = 0;
       let totalMultipleChoice = 0;
+      let hasCodingOrFreeForm = false;
       const details: Result['details'] = [];
 
       test.questions.forEach((q) => {
@@ -174,20 +211,27 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
 
           if (isCorrect) {
             score++;
-            feedbackMessage = "Correct! Well done.";
+            feedbackMessage = "Correct! Excellent understanding.";
           } else {
-            feedbackMessage = "Not quite. Let's review the correct answer.";
+            feedbackMessage = "Not quite. The correct answer provides a better approach. Review the explanation.";
           }
         } else if (q.type === 'free-form') {
+           hasCodingOrFreeForm = true;
            detail.userAnswer = data[q.id]; // Store user's answer
-           feedbackMessage = "Answer submitted. Free-form responses require further analysis.";
+           feedbackMessage = "Answer submitted. Free-form responses require thoughtful analysis. See the ideal approach below.";
+           // No isCorrect status for free-form in this auto-grade
+        } else if (q.type === 'coding-challenge') {
+            hasCodingOrFreeForm = true;
+            detail.userAnswer = data[q.id]; // Store user's code
+            feedbackMessage = "Code submitted. This requires execution and review for full evaluation. Compare your approach with the sample solution.";
+            // No isCorrect status for coding challenges in this auto-grade
         }
 
         detail.feedbackMessage = feedbackMessage;
         details.push(detail as ResultDetail); // Push the completed detail object
       });
 
-      setResult({ score, totalMultipleChoice, details });
+      setResult({ score, totalMultipleChoice, details, hasCodingOrFreeForm });
       setIsLoading(false);
       window.scrollTo(0, 0); // Scroll to top to show results
     }, 500); // 0.5 second delay
@@ -222,22 +266,33 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
             <CardTitle className="text-2xl text-primary flex items-center gap-2">
               <CheckCircle className="text-green-600" /> Test Results
             </CardTitle>
-            <CardDescription>Review your performance below. Correct answers and feedback are provided.</CardDescription>
+            <CardDescription>Review your performance below. Feedback and explanations/solutions are provided.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             <p className="text-lg font-semibold">
               Multiple Choice Score: {result.score} / {result.totalMultipleChoice} ({result.totalMultipleChoice > 0 ? Math.round((result.score / result.totalMultipleChoice) * 100) : 0}%)
             </p>
-            <p className="text-sm text-muted-foreground">
-              Free-form answers require manual review or AI analysis for detailed evaluation.
-            </p>
+            {result.hasCodingOrFreeForm && (
+                <p className="text-sm text-muted-foreground">
+                 Free-form and coding answers require manual review or AI analysis for detailed evaluation. See feedback below.
+                </p>
+            )}
              <Separator className="my-4" />
-              <div className="flex flex-col sm:flex-row gap-2">
-                  <Link href="/analyze" passHref>
-                      <Button variant="secondary" size="sm">
-                         Analyze Free-Form Answers with AI
-                      </Button>
-                  </Link>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                 {result.hasCodingOrFreeForm && (
+                     <>
+                        <Link href="/analyze" passHref>
+                            <Button variant="secondary" size="sm">
+                                <FileText className="mr-2 h-4 w-4"/> Analyze Free-Form with AI
+                            </Button>
+                        </Link>
+                        <Link href="/analyze/code" passHref>
+                            <Button variant="secondary" size="sm">
+                                <Code className="mr-2 h-4 w-4"/> Analyze Code Quality with AI
+                            </Button>
+                         </Link>
+                     </>
+                 )}
                    <Link href="/" passHref>
                        <Button variant="outline" size="sm">Back to Home</Button>
                    </Link>
@@ -258,8 +313,28 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
 
             const cardClasses = cn(
               "transition-all duration-300",
-              result ? (isCorrect === true ? 'border-green-500 bg-green-50/50' : isCorrect === false ? 'border-red-500 bg-red-50/50' : 'border-blue-300 bg-blue-50/30') : 'border-border' // Blue border for submitted free-form
+              result ? (
+                  question.type === 'multiple-choice' ?
+                      (isCorrect === true ? 'border-green-500 bg-green-50/50' : 'border-red-500 bg-red-50/50') :
+                      'border-blue-300 bg-blue-50/30' // Blue border for submitted free-form/coding
+                ) : 'border-border'
             );
+
+             const getResultIcon = () => {
+                  if (!result) return <HelpCircle className="h-6 w-6 text-muted-foreground" title="Question pending" />;
+                  if (question.type === 'multiple-choice') {
+                    return isCorrect ? (
+                        <CheckCircle className="h-6 w-6 text-green-600" title="Correct" />
+                    ) : (
+                         <XCircle className="h-6 w-6 text-red-600" title="Incorrect"/>
+                    )
+                  } else if (question.type === 'coding-challenge') {
+                     return <Code className="h-6 w-6 text-blue-600" title="Coding answer submitted" />;
+                  } else { // free-form
+                      return <FileText className="h-6 w-6 text-blue-600" title="Free-form answer submitted" />;
+                  }
+             };
+
 
             return (
               <Card key={question.id} className={cardClasses}>
@@ -268,22 +343,15 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
                     <span className="flex-1">Question {index + 1}: {question.text}</span>
                      {/* Icon indicating status */}
                      <div className="flex-shrink-0">
-                         {result && question.type === 'multiple-choice' && (
-                            isCorrect ? (
-                                <CheckCircle className="h-6 w-6 text-green-600" title="Correct" />
-                            ) : (
-                                isCorrect === false && <XCircle className="h-6 w-6 text-red-600" title="Incorrect"/>
-                            )
-                         )}
-                         {result && question.type === 'free-form' && (
-                            <FileText className="h-6 w-6 text-blue-600" title="Free-form answer submitted" />
-                         )}
-                         {!result && <HelpCircle className="h-6 w-6 text-muted-foreground" title="Question pending" />}
+                         {getResultIcon()}
                      </div>
                   </CardTitle>
+                   {question.type === 'coding-challenge' && question.language && (
+                      <CardDescription>Language: <Badge variant="secondary">{question.language}</Badge></CardDescription>
+                   )}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Display Options or Text Area */}
+                  {/* Display Options, Text Area, or Code Editor Area */}
                    {question.type === 'multiple-choice' && question.options && (
                     <FormField
                       control={form.control}
@@ -364,24 +432,62 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
                       )}
                     />
                   )}
+                   {question.type === 'coding-challenge' && (
+                     <FormField
+                       control={form.control}
+                       name={question.id}
+                       render={({ field }) => (
+                         <FormItem>
+                           <FormLabel className="font-medium">Your Code:</FormLabel>
+                           <FormControl>
+                             <Textarea
+                               placeholder={question.starterCode || "Write your code here..."}
+                               className="min-h-[200px] font-mono text-sm bg-muted/30 border-dashed border-input" // Style for code
+                               {...field}
+                               disabled={!!result || isLoading}
+                               readOnly={!!result} // Make read-only after submission
+                               spellCheck="false" // Disable spellcheck for code
+                             />
+                           </FormControl>
+                            <FormDescription>Enter your {question.language} code in the editor.</FormDescription>
+                           <FormMessage />
+                         </FormItem>
+                       )}
+                     />
+                   )}
 
-                  {/* Display Feedback and Explanation after submission */}
+                  {/* Display Feedback and Explanation/Solution after submission */}
                    {result && (
                      <div className="mt-4 space-y-3 border-t pt-4">
                        {feedbackMessage && (
-                            <Alert className={cn(isCorrect ? "bg-green-100/70 border-green-300" : (isCorrect === false ? "bg-red-100/70 border-red-300" : "bg-blue-100/70 border-blue-300"))}>
-                                <AlertTitle className={cn("font-medium", isCorrect ? "text-green-800" : (isCorrect === false ? "text-red-800" : "text-blue-800"))}>
-                                    {isCorrect ? <CheckCircle className="inline-block mr-2 h-4 w-4"/> : (isCorrect === false ? <XCircle className="inline-block mr-2 h-4 w-4"/> : <FileText className="inline-block mr-2 h-4 w-4"/>)}
+                            <Alert className={cn(
+                                question.type === 'multiple-choice'
+                                    ? (isCorrect ? "bg-green-100/70 border-green-300" : "bg-red-100/70 border-red-300")
+                                    : "bg-blue-100/70 border-blue-300" // Blue for free-form/coding feedback
+                            )}>
+                                <AlertTitle className={cn("font-medium",
+                                     question.type === 'multiple-choice'
+                                        ? (isCorrect ? "text-green-800" : "text-red-800")
+                                        : "text-blue-800"
+                                )}>
+                                    {question.type === 'multiple-choice'
+                                        ? (isCorrect ? <CheckCircle className="inline-block mr-2 h-4 w-4"/> : <XCircle className="inline-block mr-2 h-4 w-4"/>)
+                                        : (question.type === 'coding-challenge' ? <Code className="inline-block mr-2 h-4 w-4"/> : <FileText className="inline-block mr-2 h-4 w-4"/>)
+                                    }
                                     Feedback
                                 </AlertTitle>
-                                <AlertDescription className={cn("text-sm", isCorrect ? "text-green-700" : (isCorrect === false ? "text-red-700" : "text-blue-700"))}>
+                                <AlertDescription className={cn("text-sm",
+                                     question.type === 'multiple-choice'
+                                        ? (isCorrect ? "text-green-700" : "text-red-700")
+                                        : "text-blue-700"
+                                )}>
                                      {feedbackMessage}
                                 </AlertDescription>
                             </Alert>
                        )}
 
-                        {/* Show Correct Answer/Explanation */}
-                         {question.explanation && (isCorrect === false || question.type === 'free-form') && (
+                        {/* Show Explanation (for MCQs/Free-form if incorrect) */}
+                         {question.explanation && (question.type !== 'coding-challenge' && (isCorrect === false || question.type === 'free-form')) && (
                            <Alert variant="default" className="bg-background/80 border-border">
                              <Lightbulb className="h-4 w-4 text-accent" />
                              <AlertTitle className="text-primary">Explanation / Ideal Answer</AlertTitle>
@@ -389,6 +495,17 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
                                {question.explanation}
                              </AlertDescription>
                            </Alert>
+                         )}
+
+                         {/* Show Solution (for coding challenges) */}
+                         {question.solution && question.type === 'coding-challenge' && (
+                            <Alert variant="default" className="bg-background/80 border-border">
+                                <Lightbulb className="h-4 w-4 text-accent" />
+                                <AlertTitle className="text-primary">Sample Solution ({question.language})</AlertTitle>
+                                <AlertDescription>
+                                    <pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto font-mono"><code>{question.solution}</code></pre>
+                                </AlertDescription>
+                            </Alert>
                          )}
                      </div>
                    )}
@@ -406,7 +523,6 @@ export default function TakeTestPage({ params }: { params: { testId: string } })
           )}
             {result && (
              <CardFooter className="flex justify-center mt-6">
-                {/* Link to home is already in the results card */}
                 <Button type="button" onClick={() => window.scrollTo(0,0)} variant="outline">
                     Back to Top (View Results)
                 </Button>
