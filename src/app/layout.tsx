@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'SkillCheck Pro',
+  title: 'KaushalSetu', // Updated title
   description: 'Skill Assessment Engine by Firebase Studio',
 };
 

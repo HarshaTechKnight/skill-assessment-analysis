@@ -16,7 +16,7 @@ export default function Header() {
       <nav className="container mx-auto px-4 py-2 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2 text-xl font-semibold hover:opacity-90 transition-opacity">
           <CheckCircle className="w-6 h-6 text-accent" />
-          SkillCheck Pro
+          KaushalSetu {/* Updated name */}
         </Link>
         <div className="flex items-center space-x-2 md:space-x-4">
           {/* Create Test Dropdown */}

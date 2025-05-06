@@ -7,7 +7,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center space-y-8">
       <header className="text-center space-y-2">
-        <h1 className="text-4xl font-bold tracking-tight text-primary">Welcome to SkillCheck Pro</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-primary">Welcome to KaushalSetu</h1> {/* Updated name */}
         <p className="text-lg text-muted-foreground max-w-2xl">
           Your intelligent engine for role-specific skill assessment, AI-powered test generation, auto-grading, and performance analysis.
         </p>
